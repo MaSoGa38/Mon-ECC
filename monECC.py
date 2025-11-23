@@ -112,10 +112,7 @@ def crypt(pub, text):
         with open("monECC.priv", "r") as f:
             priv_key = f.readlines()[1]
         sx, sy = point_mult(base64.b64decode(priv_key), pub_key)
-
         secret_partage = hashlib.sha256(sx)
-        secret_partage = hashlib.sha256(sy)
-
         iv = secret_partage[:16]  # 16 premiers chars dans IV
         cle = secret_partage[-16:]  # Le reste comme clé
         padder = padding.PKCS7(128).padder()
@@ -139,10 +136,7 @@ def decrypt(priv, text):
         with open("monECC.pub", "r") as f:
             pub_key = f.readlines()
         sx, sy = point_mult(base64.b64decode(pub_key), priv_key)
-
         secret_partage = hashlib.sha256(sx)
-        secret_partage = hashlib.sha256(sy)
-
         iv = secret_partage[:16]  # 16 premiers chars dans IV
         cle = secret_partage[-16:]  # Le reste comme clé
         padder = padding.PKCS7(128).padder()
