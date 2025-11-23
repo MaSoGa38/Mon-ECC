@@ -7,9 +7,12 @@ Création: Mathias SOLER, le 28/10/2025
 # Imports :
 import argparse
 import sys
-from math import log2
 from random import randint
 import base64
+import hashlib
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import padding
 
 # Paramètres de la courbe :
 # y^2 = x^3 + 35x + 3 (modulo 101)
@@ -19,25 +22,26 @@ m = 101
 p = (2, 9)
 
 # Fonctions :
-def recadrage(P):
+def recadrage(p):
     """
     Calcul modulo p de P
     on  veut que les coordonées de P soient entre -p/2 et (p/2)-1
     """
-    Px, Py = P
-    lim_basse = (int)(p / 2) * -1
-    lim_haute = (int)(p / 2) - 1
+    px, py = p
+    lim_basse = (int)(m / 2) * -1
+    lim_haute = (int)(m / 2) - 1
 
-    if Px < lim_basse:
-        Px = Px + p
-    if Py < lim_basse:
-        Py = Py + p
-    if Px > lim_haute:
-        Px = Px - p
-    if Py > lim_haute:
-        Py = Py - p
+    if px < lim_basse:
+        px = px + m
+    if py < lim_basse:
+        py = px + m
+    if px > lim_haute:
+        px = px - m
+    if py > lim_haute:
+        py = py - m
 
-    return Px, Py
+    return px, py
+
 
 def point_add(p1, p2):
     """
@@ -99,16 +103,63 @@ def keygen():
         f.write("---end monECC key---")
 
 def crypt(pub, text):
-    pass
+    with open(pub, "r") as f:
+        pub_key = f.readlines()
 
+    if pub_key[0] == "---begin monECC public key---":
+        qx, qy = base64.b64decode(pub_key[1]).split(";")
+        return qx, qy
+        with open("monECC.priv", "r") as f:
+            priv_key = f.readlines()[1]
+        sx, sy = point_mult(base64.b64decode(priv_key), pub_key)
+
+        secret_partage = hashlib.sha256(sx)
+        secret_partage = hashlib.sha256(sy)
+
+        iv = secret_partage[:16]  # 16 premiers chars dans IV
+        cle = secret_partage[-16:]  # Le reste comme clé
+        padder = padding.PKCS7(128).padder()
+        padded_data = padder.update(text.encode('utf-8'))
+        padded_data += padder.finalize()
+        cipher = Cipher(algorithms.AES(cle), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+        return f"Le texte chiffré est {ciphertext}"
+
+    else:
+        return "La clé n'est pas du bon format"
 
 def decrypt(priv, text):
-    pass
+    with open(priv, "r") as f:
+        priv_key = f.readlines()
+
+    if priv_key[0] == "---begin monECC private key---":
+        qx, qy = base64.b64decode(priv_key[1]).split(";")
+        return qx, qy
+        with open("monECC.pub", "r") as f:
+            pub_key = f.readlines()
+        sx, sy = point_mult(base64.b64decode(pub_key), priv_key)
+
+        secret_partage = hashlib.sha256(sx)
+        secret_partage = hashlib.sha256(sy)
+
+        iv = secret_partage[:16]  # 16 premiers chars dans IV
+        cle = secret_partage[-16:]  # Le reste comme clé
+        padder = padding.PKCS7(128).padder()
+        padded_data = padder.update(text.encode('utf-8'))
+        padded_data += padder.finalize()
+        cipher = Cipher(algorithms.AES(cle), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+        return f"Le texte déchiffré est {ciphertext}"
+
+    else:
+        return "La clé n'est pas du bon format"
 
 
 def help():
     print("""
-    Script monECC par Hugues Mathias SOLER
+    Script monECC par Mathias SOLER
     Syntaxe :
     monECC <commande> [<clé>] [<texte>] [switchs]
     Commandes :
@@ -118,6 +169,7 @@ def help():
         help                    Affiche ce manuel
         """
     )
+
 
 # Programme principal :
 def main():
@@ -134,7 +186,7 @@ def main():
         keygen()
     elif args.commande == "crypt":
         if not args.cle or not args.texte:
-            print("Bonne utilisation : monECC crypt <clé.pub> <texte>")
+            print("Mauvaise utilisation, la bonne est : monECC crypt <clé.pub> <texte>")
         else:
             crypt(args.cle, args.texte)
     elif args.commande == "decrypt":
